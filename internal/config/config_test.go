@@ -30,6 +30,12 @@ func TestDefaults(t *testing.T) {
 	if c.CacheTTL <= 0 {
 		t.Error("CacheTTL must have a sensible default")
 	}
+	if c.Git.Enabled {
+		t.Error("git must be off unless asked for: it changes what is on disk")
+	}
+	if c.Git.Quiet <= 0 {
+		t.Error("git.quiet must have a sensible default even while git is off, so turning it on is one line")
+	}
 }
 
 func TestLoadFile(t *testing.T) {
@@ -114,6 +120,9 @@ func TestValidate(t *testing.T) {
 		{"empty state dir", func(c *config.Config) { c.StateDir = "" }, "stateDir"},
 		{"bad log level", func(c *config.Config) { c.LogLevel = "loud" }, "logLevel"},
 		{"negative ttl", func(c *config.Config) { c.CacheTTL = config.Duration(-time.Second) }, "cacheTTL"},
+		{"zero git quiet", func(c *config.Config) { c.Git.Quiet = 0 }, "git.quiet"},
+		{"negative git quiet", func(c *config.Config) { c.Git.Quiet = config.Duration(-time.Minute) }, "git.quiet"},
+		{"negative git gc interval", func(c *config.Config) { c.Git.GCEvery = config.Duration(-time.Hour) }, "git.gcEvery"},
 		{"agent without a tag", func(c *config.Config) {
 			c.Agents = []config.Agent{{ActAs: "alice@github"}}
 		}, "tag"},

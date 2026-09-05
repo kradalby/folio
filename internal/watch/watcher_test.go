@@ -131,17 +131,15 @@ func TestWatcherIgnoresHiddenDirectories(t *testing.T) {
 	}
 }
 
-func TestWatcherIgnoresNonMarkdown(t *testing.T) {
+func TestWatcherReportsAttachmentsToo(t *testing.T) {
+	// The indexer ignores anything that is not markdown, but the git committer
+	// wants every file. Sorting them out is the consumer's job, not the
+	// watcher's.
 	v, s := newWatched(t)
 	writeExternal(t, v.Dir(), "image.png", "notreallyapng")
 	writeExternal(t, v.Dir(), "real.md", "# Real\n")
 	s.waitFor(t, "real.md", s.seen("real.md"))
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.paths["image.png"]; ok {
-		t.Error("watcher reported a non-markdown file")
-	}
+	s.waitFor(t, "image.png", s.seen("image.png"))
 }
 
 func TestWatcherPicksUpNewDirectories(t *testing.T) {

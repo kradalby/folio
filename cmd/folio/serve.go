@@ -12,6 +12,7 @@ import (
 
 	"github.com/scottjab/folio/internal/config"
 	"github.com/scottjab/folio/internal/httpapi"
+	"github.com/scottjab/folio/internal/identity"
 	"github.com/scottjab/folio/internal/mcpsrv"
 	"github.com/scottjab/folio/internal/tsserve"
 	"github.com/scottjab/folio/internal/web"
@@ -27,6 +28,7 @@ func runServe(ctx context.Context, args []string) error {
 		fs.StringVar(&c.Hostname, "hostname", c.Hostname, "tailnet node name")
 		fs.StringVar(&c.Addr, "addr", c.Addr, "listen address inside the tailnet")
 		fs.BoolVar(&c.WatchExternal, "watch", c.WatchExternal, "notice edits made outside folio, such as in Obsidian")
+		fs.BoolVar(&c.Git.Enabled, "git", c.Git.Enabled, "keep each vault in a git repository and commit changes to it")
 		fs.BoolVar(&verbose, "verbose-tsnet", false, "pass tsnet's own logs through at info level")
 	})
 	if err != nil {
@@ -62,9 +64,16 @@ func runServe(ctx context.Context, args []string) error {
 	}
 	defer ts.Close()
 
+	// History stops after the watchers, so an external edit the watcher flushes
+	// on the way out still gets committed.
+	hist := newVaultHistory(a, log)
+	defer hist.stop()
 	watchers := newVaultWatchers(ctx, a, log)
 	defer watchers.stop()
-	a.withIdentity(ts.WhoIsFunc(), watchers.startFor)
+	a.withIdentity(ts.WhoIsFunc(), func(u identity.User) {
+		watchers.startFor(u)
+		hist.startFor(u)
+	})
 
 	mcp := mcpsrv.New(mcpsrv.Deps{
 		Notes: a.notes, Index: a.index, Identity: a.ident,
@@ -82,6 +91,9 @@ func runServe(ctx context.Context, args []string) error {
 		if err := watchers.startAll(); err != nil {
 			return err
 		}
+	}
+	if err := hist.startAll(ctx); err != nil {
+		return err
 	}
 
 	ln, err := ts.ListenTLS()

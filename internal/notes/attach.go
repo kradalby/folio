@@ -93,6 +93,7 @@ func (s *Service) Attach(ctx context.Context, sc Scope, up Upload) (Attachment, 
 	if err != nil {
 		return Attachment{}, err
 	}
+	s.publishFile(ctx, sc, stored.Path)
 
 	return Attachment{
 		Vault:  sc.Dir,

@@ -27,6 +27,34 @@ type NoteChanged struct {
 	SHA256  string `json:"sha256,omitzero"`
 	// ByLogin is empty for a change made outside folio, which is how the UI
 	// tells "you saved this" from "Obsidian saved this".
-	ByLogin string    `json:"byLogin,omitzero"`
+	ByLogin string `json:"byLogin,omitzero"`
+	// ByName is the display name behind ByLogin. It stays off the wire: the
+	// clients key on the login, and this exists so a commit can carry a name
+	// rather than a handle.
+	ByName string `json:"-"`
+	// ByAgent is the tag of the node that made the change on ByLogin's behalf,
+	// when an agent did rather than the person. Off the wire for the same
+	// reason as ByName: it is for the record, not for the UI.
+	ByAgent string    `json:"-"`
 	At      time.Time `json:"at"`
+}
+
+// FileChanged is emitted when a file that is not a note is added, replaced, or
+// removed: an attachment uploaded through folio, or one dropped into the vault
+// directory from outside.
+//
+// It is not on the SSE stream and MCP does not forward it. A client learns
+// about an attachment from the note that links to it, which is the event it
+// already gets. This exists for subscribers that care about the files
+// themselves, the git committer first among them.
+type FileChanged struct {
+	VaultID int64
+	Vault   string
+	Path    string
+	// ByLogin and ByName are empty for a change made outside folio. ByAgent
+	// is the acting node's tag when an agent made the change.
+	ByLogin string
+	ByName  string
+	ByAgent string
+	At      time.Time
 }

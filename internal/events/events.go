@@ -2,7 +2,8 @@
 //
 // It exists so the pieces that need to know a note changed (the SSE stream
 // feeding the browser, the MCP server pushing resource-updated notifications,
-// the indexer) can find out without the writer having to know they exist.
+// the indexer, the git committer) can find out without the writer having to
+// know they exist.
 //
 // The API is built on Go 1.27 generic methods. Before 1.27 a method could not
 // declare type parameters, so a typed bus had to expose package-level functions

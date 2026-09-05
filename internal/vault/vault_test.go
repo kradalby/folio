@@ -487,3 +487,83 @@ func mustWrite(t *testing.T, base, rel, content string) {
 		t.Fatalf("WriteFile(%q): %v", rel, err)
 	}
 }
+
+func TestOpenWritesAGitignore(t *testing.T) {
+	dir := t.TempDir()
+	v, err := vault.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer v.Close()
+
+	b, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("a fresh vault should have a .gitignore: %v", err)
+	}
+	for _, want := range []string{".folio/", ".obsidian/workspace.json"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf(".gitignore should ignore %s; got:\n%s", want, b)
+		}
+	}
+
+	// It is hidden, so it is never a note.
+	entries, err := v.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, e := range entries {
+		if e.Path == ".gitignore" {
+			t.Error(".gitignore showed up in the vault listing")
+		}
+	}
+}
+
+func TestOpenLeavesAnExistingGitignoreAlone(t *testing.T) {
+	dir := t.TempDir()
+	theirs := "Private/\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(theirs), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	v, err := vault.Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer v.Close()
+
+	b, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(b) != theirs {
+		t.Errorf("Open rewrote a .gitignore it did not create: got %q, want %q", b, theirs)
+	}
+}
+
+func TestOpenSurvivesAVaultItCannotWriteAGitignoreInto(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	dir := t.TempDir()
+	v, err := vault.Open(dir) // lays out the sidecar and writes the .gitignore
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	v.Close()
+	if err := os.Remove(filepath.Join(dir, ".gitignore")); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+
+	v2, err := vault.Open(dir)
+	if err != nil {
+		t.Fatalf("Open should not fail over a .gitignore it cannot write: %v", err)
+	}
+	defer v2.Close()
+	if _, err := os.Stat(filepath.Join(dir, ".gitignore")); err == nil {
+		t.Error("a .gitignore appeared in a directory nobody can write to")
+	}
+}

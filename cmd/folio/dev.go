@@ -87,6 +87,8 @@ func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	}
 	defer a.Close()
 
+	hist := newVaultHistory(a, log)
+	defer hist.stop()
 	watchers := newVaultWatchers(ctx, a, log)
 	defer watchers.stop()
 
@@ -97,7 +99,10 @@ func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 			Login:       cfg.DevLogin,
 			DisplayName: cfg.DevLogin,
 		}, nil
-	}, watchers.startFor)
+	}, func(u identity.User) {
+		watchers.startFor(u)
+		hist.startFor(u)
+	})
 
 	mcp := mcpsrv.New(mcpsrv.Deps{
 		Notes: a.notes, Index: a.index, Identity: a.ident,
@@ -114,6 +119,9 @@ func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		if err := watchers.startAll(); err != nil {
 			return err
 		}
+	}
+	if err := hist.startAll(ctx); err != nil {
+		return err
 	}
 
 	ln, err := net.Listen("tcp", cfg.DevAddr)

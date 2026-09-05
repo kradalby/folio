@@ -87,15 +87,16 @@ func (a *app) Close() error {
 
 // vaultRow is one user's vault, as the offline commands see it.
 type vaultRow struct {
-	ID    int64  `db:"id"`
-	Dir   string `db:"dir"`
-	Login string `db:"login"`
+	ID          int64  `db:"id"`
+	Dir         string `db:"dir"`
+	Login       string `db:"login"`
+	DisplayName string `db:"display_name"`
 }
 
 // vaultRows lists every vault in the state directory.
 func (a *app) vaultRows(ctx context.Context) ([]vaultRow, error) {
 	return a.db.All[vaultRow](ctx, `
-		SELECT v.id AS id, v.dir AS dir, u.login AS login
+		SELECT v.id AS id, v.dir AS dir, u.login AS login, u.display_name AS display_name
 		FROM vaults v JOIN users u ON u.id = v.user_id
 		ORDER BY u.login`)
 }

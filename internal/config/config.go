@@ -26,6 +26,23 @@ type Agent struct {
 	ActAs string `json:"actAs"`
 }
 
+// Git is the settings for keeping vaults in git.
+type Git struct {
+	// Enabled keeps each vault in its own git repository, with changes
+	// committed once the vault has been quiet for Quiet. Commits are authored
+	// by whoever made the change, as the tailnet identified them. folio only
+	// ever commits; pushing and pulling are left to you.
+	Enabled bool `json:"enabled"`
+	// Quiet is how long a vault must go without a change before what has
+	// changed is committed. Sustained writing is committed at least every six
+	// times this, so a long session still has points to go back to.
+	Quiet Duration `json:"quiet"`
+	// GCEvery is how often each repository is checked for loose objects that
+	// have piled up, and repacked when they have, on the thresholds
+	// `git gc --auto` uses. Zero turns the sweep off.
+	GCEvery Duration `json:"gcEvery"`
+}
+
 // Config is the whole of folio' configuration.
 type Config struct {
 	// Hostname is the tsnet node name, so the app lands at
@@ -44,6 +61,8 @@ type Config struct {
 	WatchExternal bool `json:"watchExternal"`
 	// Agents lets a tagged node act as a named user.
 	Agents []Agent `json:"agents"`
+	// Git keeps each vault in a git repository. Off unless asked for.
+	Git Git `json:"git"`
 	// DevAddr, when set, also serves plain HTTP on a local address. It bypasses
 	// the tailnet entirely and is for development only.
 	DevAddr string `json:"devAddr"`
@@ -95,6 +114,7 @@ func Default() Config {
 		LogLevel:      "info",
 		CacheTTL:      Duration(30 * time.Second),
 		WatchExternal: true,
+		Git:           Git{Quiet: Duration(5 * time.Minute), GCEvery: Duration(24 * time.Hour)},
 	}
 }
 
@@ -177,6 +197,12 @@ func (c *Config) Validate() error {
 	}
 	if c.CacheTTL < 0 {
 		errs = append(errs, errors.New("cacheTTL must not be negative"))
+	}
+	if c.Git.Quiet <= 0 {
+		errs = append(errs, errors.New(`git.quiet must be a positive duration such as "5m"`))
+	}
+	if c.Git.GCEvery < 0 {
+		errs = append(errs, errors.New(`git.gcEvery must not be negative; "0s" turns the sweep off`))
 	}
 
 	seen := map[string]bool{}

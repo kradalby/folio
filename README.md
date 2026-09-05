@@ -48,6 +48,12 @@ table, a tinted cursor line, and the backlinks bar](docs/web-editor.png)
 - **Obsidian on the desktop still works.** Point Obsidian at a vault directory.
   Edits there are noticed and reindexed within a second, and open browser tabs
   update live.
+- **History in git, if you want it.** Turn it on and every vault is a git
+  repository that folio commits to once the vault has been quiet for a few
+  minutes. Each commit is authored by whoever made the change, as the tailnet
+  identified them, and an agent acting as you is named on its commits alongside
+  you. folio only ever commits: pushing, pulling, and branching are yours, with
+  any git you like.
 - **A terminal client, at parity.** `folio tui` is a full client, not a viewer:
   search, write, rename, delete, daily notes, backlinks, sharing, `[[`
   completion, attaching a file, and transclusion, over the same JSON API the
@@ -134,6 +140,9 @@ On NixOS, using the flake's module:
 
     # Let an agent on a tagged node act as you over MCP.
     agents = [{ tag = "tag:notes-agent"; actAs = "you@github"; }];
+
+    # Keep each vault in git, committed as changes settle.
+    git.enable = true;
   };
 }
 ```
@@ -173,7 +182,9 @@ $STATE_DIR/
       Projects/folio.md
       attachments/diagram.png
       .obsidian/                 preserved, never indexed
-      .folio/{tmp,trash}/      atomic-write staging and deleted notes
+      .folio/{tmp,trash}/        atomic-write staging and deleted notes
+      .gitignore                 covers the two lines above, for a vault kept in git
+      .git/                      only with git turned on; see below
 ```
 
 A note is ordinary markdown:
@@ -433,6 +444,47 @@ Whether a change is worth loading is decided by the content hash, not by who
 made it. The login on an event is your own whenever the other writer is you
 somewhere else, so treating "by me" as "already know about it" is how an edit
 made in one tab fails to show up in another.
+
+## History in git
+
+Turn it on and each vault becomes its own git repository:
+
+```json
+{ "git": { "enabled": true, "quiet": "5m", "gcEvery": "24h" } }
+```
+
+or `services.folio.git.enable = true;` on NixOS. From then on, once a vault has
+gone `quiet` without a change, whatever changed is committed. A long writing
+session is committed at least every six times that, so there are points to go
+back to in the middle of it. The commit is authored by whoever made the change,
+as the tailnet identified them: your edits are yours, an agent acting as you
+shows up as `You via tag:notes-agent <you@github>`, and a file Obsidian wrote
+is the vault owner's. The committer on every one of them is folio, which is
+what it literally is.
+
+Attachments are committed alongside the notes that link to them. The trash and
+the write-staging directory under `.folio/` never are, whatever the vault's
+`.gitignore` says, and a `.gitignore` of your own is obeyed: ignore a folder and
+folio will not commit what is in it. Every vault gets a `.gitignore` covering
+`.folio/` and Obsidian's workspace files when it is created, whether or not git
+is on, so a vault you `git init` by hand is safe too.
+
+folio only ever commits. It never pushes, pulls, merges, or changes branch, and
+a vault that is already a repository is used as it stands, on whatever branch
+is checked out. Pushing to a backup is a cron job and a deploy key, with
+whichever git you like. Pulling into a running vault works too, and the watcher
+indexes what arrives. Committing by hand in the vault is fine as long as you and
+folio are not doing it at the same moment: neither takes the other's lock.
+
+Every `gcEvery`, a day by default, folio checks each repository and repacks it
+once loose objects have piled up, on the same thresholds `git gc --auto` uses,
+so a vault that is quiet costs a directory listing and nothing else. A repack
+drops anything unreachable, as `git gc --prune=now` would; folio never makes
+unreachable objects, but a `git reset` by hand does. Set `gcEvery` to `"0s"`
+to run `git gc` yourself instead.
+
+Turning git off later leaves the repository where it is. Removing the `.git`
+directory is the whole of getting rid of it.
 
 ## Development
 

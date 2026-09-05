@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"hash/maphash"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -50,7 +51,25 @@ const (
 	// tsLayout stamps conflict copies and trash entries. Colons are illegal on
 	// several filesystems, so it is RFC3339 with dashes.
 	tsLayout = "2006-01-02T15-04-05"
+
+	// gitignoreFile is written into a vault that has none, so that a vault
+	// someone turns into a git repository, by hand or through folio, does not
+	// commit the sidecar. It is written once and never touched again: after
+	// that it belongs to whoever owns the vault.
+	gitignoreFile = ".gitignore"
 )
+
+// defaultGitignore is the content of a fresh vault's .gitignore. The trash and
+// the write-staging directory are folio's own and churn constantly; Obsidian's
+// workspace files record which panes are open and change every time a window is
+// resized. None of it is content.
+const defaultGitignore = `# folio's sidecar: the trash, and staging for atomic writes.
+.folio/
+
+# Obsidian's window layout, which changes every time a pane is moved.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+`
 
 var (
 	// ErrNotFound means the path does not exist in the vault.
@@ -144,7 +163,31 @@ func Open(dir string) (*Vault, error) {
 			return nil, fmt.Errorf("create %s: %w", d, err)
 		}
 	}
+	// Best effort, and deliberately so. A vault that cannot take a new file is
+	// a vault that cannot take a note either, and the first write will say so
+	// where the writer can see it. Refusing to open for reading over a
+	// convenience file would be the wrong trade.
+	if err := ensureGitignore(root); err != nil {
+		slog.Warn("could not write a .gitignore into the vault; carrying on without one", "vault", abs, "err", err)
+	}
 	return &Vault{root: root, dir: abs, Now: time.Now, seed: maphash.MakeSeed()}, nil
+}
+
+// ensureGitignore writes the default .gitignore if the vault has none. An
+// existing file, whatever it says, is left exactly as it is.
+func ensureGitignore(root *os.Root) error {
+	f, err := root.OpenFile(gitignoreFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
+	if errors.Is(err, fs.ErrExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("create %s: %w", gitignoreFile, err)
+	}
+	if _, err := f.WriteString(defaultGitignore); err != nil {
+		f.Close()
+		return fmt.Errorf("write %s: %w", gitignoreFile, err)
+	}
+	return f.Close()
 }
 
 // Close releases the vault's root handle.

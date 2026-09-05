@@ -34,7 +34,7 @@
           pname = "folio";
           inherit version;
           src = ./.;
-          vendorHash = "sha256-IYAsSJSCUogASK88r6i8VcreZXjNfI8P74XGXfx47XM=";
+          vendorHash = "sha256-iLiZ0UysYHjD/Al2TkGkxktf+Ywfc4zC9hyNVHdUlWc=";
 
           env.CGO_ENABLED = 0;
 
@@ -116,6 +116,7 @@
                   hostname = "notes";
                   authKeyFile = "/run/secrets/folio-authkey";
                   agents = [{ tag = "tag:notes-agent"; actAs = "you@github"; }];
+                  git.enable = true;
                   settings.cacheTTL = "60s";
                 };
               })

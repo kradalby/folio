@@ -9,6 +9,7 @@ import (
 	"github.com/scottjab/folio/internal/events"
 	"github.com/scottjab/folio/internal/identity"
 	"github.com/scottjab/folio/internal/vault"
+	"github.com/scottjab/folio/internal/vaultpath"
 	"github.com/scottjab/folio/internal/watch"
 )
 
@@ -97,7 +98,27 @@ func (w *vaultWatchers) start(vaultID int64, dir string, reconcile bool) {
 
 // onChange reindexes the paths a burst of filesystem events settled on.
 func (w *vaultWatchers) onChange(vaultID int64, dir string, v *vault.Vault, paths []string) {
-	stats, err := w.app.index.SyncPaths(w.ctx, vaultID, v, paths)
+	var notes, files []string
+	for _, p := range paths {
+		if vaultpath.IsMarkdown(p) {
+			notes = append(notes, p)
+		} else {
+			files = append(files, p)
+		}
+	}
+
+	// An attachment has no index entry to compare against, so there is no way
+	// to tell an external change from our own upload coming back around. Report
+	// both: the only subscriber is the git committer, and adding an unchanged
+	// file to a commit is a no-op there.
+	for _, p := range files {
+		w.app.bus.Emit(w.ctx, events.FileChanged{VaultID: vaultID, Vault: dir, Path: p, At: time.Now()})
+	}
+	if len(notes) == 0 {
+		return
+	}
+
+	stats, err := w.app.index.SyncPaths(w.ctx, vaultID, v, notes)
 	if err != nil {
 		w.log.Warn("reindexing external changes failed", "vault", dir, "err", err)
 		return
@@ -111,7 +132,7 @@ func (w *vaultWatchers) onChange(vaultID int64, dir string, v *vault.Vault, path
 	// Tell open browser tabs and any subscribed agent. ByLogin is deliberately
 	// empty, which is how the UI tells "you saved this" from "something else
 	// changed this file".
-	for _, p := range paths {
+	for _, p := range notes {
 		w.app.bus.Emit(w.ctx, events.NoteChanged{
 			ID: newEventID(), Kind: events.NoteUpdated,
 			VaultID: vaultID, Vault: dir, Path: p, At: time.Now(),

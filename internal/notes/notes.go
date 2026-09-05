@@ -511,7 +511,20 @@ func (s *Service) publish(ctx context.Context, sc Scope, n vault.Note, kind, old
 	s.Bus.Emit(ctx, events.NoteChanged{
 		ID: uuid.NewV7().String(), Kind: kind,
 		VaultID: sc.VaultID, Vault: sc.Dir, Path: n.Path, OldPath: oldPath,
-		SHA256: n.SHA256, ByLogin: sc.User.Login, At: time.Now(),
+		SHA256: n.SHA256, ByLogin: sc.User.Login, ByName: sc.User.DisplayName, ByAgent: sc.User.AgentTag,
+		At: time.Now(),
+	})
+}
+
+// publishFile announces a change to a file that is not a note. Unlike publish
+// this reaches no browser and no agent; see [events.FileChanged].
+func (s *Service) publishFile(ctx context.Context, sc Scope, path string) {
+	if s.Bus == nil {
+		return
+	}
+	s.Bus.Emit(ctx, events.FileChanged{
+		VaultID: sc.VaultID, Vault: sc.Dir, Path: path,
+		ByLogin: sc.User.Login, ByName: sc.User.DisplayName, ByAgent: sc.User.AgentTag, At: time.Now(),
 	})
 }
 

@@ -152,20 +152,20 @@ func (w *Watcher) handle(ev fsnotify.Event) {
 		delete(w.watched, ev.Name)
 		w.mu.Unlock()
 	}
-	if !vaultpath.IsMarkdown(rel) {
-		return
-	}
+	// Attachments are reported alongside notes. The indexer ignores them, but
+	// the git committer wants to know an image landed just as much as it wants
+	// to know a note did, and the watcher is not the place to decide who cares.
 	w.deb.Add(rel)
 }
 
-// reportExisting walks a directory that just appeared and reports its notes, so
-// a `git checkout` that creates a folder full of files does not go unnoticed.
+// reportExisting walks a directory that just appeared and reports its files, so
+// a `git checkout` that creates a folder full of them does not go unnoticed.
 func (w *Watcher) reportExisting(dir string) {
 	filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}
-		if rel := w.rel(p); rel != "" && !vaultpath.IsHidden(rel) && vaultpath.IsMarkdown(rel) {
+		if rel := w.rel(p); rel != "" && !vaultpath.IsHidden(rel) {
 			w.deb.Add(rel)
 		}
 		return nil

@@ -35,6 +35,7 @@ internal/
   prefs/            per-user settings both front ends obey
   share/            who may read or write what
   watch/            debouncer and fsnotify wiring for external edits
+  history/          one git repository per vault, committed as changes settle
   events/           typed in-process pub/sub
   httpapi/          JSON API, SSE, CSRF, the app shell
   mcpsrv/           MCP tools, resources, prompts
@@ -111,6 +112,21 @@ cannot: an agent has no cursor to drop a file onto, so `attach_file` takes
 base64, and a terminal cannot draw a picture, so an embedded image is named
 rather than rendered. Anything else is the browser quietly becoming the real
 client and the other two decaying into viewers.
+
+`internal/history` stages paths one at a time, with go-git's `SkipStatus`, and
+reads the whole worktree only when a vault first comes under watch. go-git's
+status pass hashes every file in the worktree, which is what `git add -A` costs
+there, and a vault with a few gigabytes of attachments would pay it every few
+minutes for the sake of one note. The events already say which paths changed,
+so those are what get staged. Two consequences follow. The vault's `.gitignore`
+is matched by hand, because a path added with `SkipStatus` is added even when
+it is ignored. And the watcher reports attachments as well as notes, with the
+sorting-out done in `cmd/folio`, because the indexer and the committer want
+different subsets of the same events and the watcher is not the place to know
+that. Repacking uses go-git's `RepackObjects` and then reopens the repository,
+because go-git remembers the index of every pack it has read and deleting a
+pack does not make it forget; without the reopen the next commit can go looking
+for its parent in a file that is gone.
 
 `internal/tui` is tested against a real server, not a mocked client: the test
 starts the actual SQLite store, vault, and HTTP handlers, then drives the model

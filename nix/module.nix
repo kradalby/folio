@@ -24,6 +24,7 @@ let
       inherit (cfg) hostname logLevel watchExternal;
       stateDir = cfg.stateDir;
       addr = cfg.addr;
+      git = { enabled = cfg.git.enable; quiet = cfg.git.quiet; gcEvery = cfg.git.gcEvery; };
     }
     // lib.optionalAttrs (cfg.agents != [ ]) { inherit (cfg) agents; }
     // cfg.settings
@@ -91,6 +92,43 @@ in
         Obsidian or pulling one in with git updates the search index and any open
         browser tab.
       '';
+    };
+
+    git = {
+      enable = lib.mkEnableOption "keeping each vault in a git repository" // {
+        description = ''
+          Keep each vault in its own git repository, with changes committed
+          once the vault has been quiet for `git.quiet`. Commits are authored by
+          whoever made the change, as the tailnet identified them, and an agent
+          acting as you is named on its commits alongside you. folio only ever
+          commits: pushing, pulling, and branching
+          are yours to do with any git you like, and a vault that is already a
+          repository is used as it stands.
+        '';
+      };
+
+      quiet = lib.mkOption {
+        type = lib.types.str;
+        default = "5m";
+        example = "10m";
+        description = ''
+          How long a vault must go without a change before what has changed is
+          committed. A long writing session is committed at least every six
+          times this, so there are points to go back to in the middle of it.
+        '';
+      };
+
+      gcEvery = lib.mkOption {
+        type = lib.types.str;
+        default = "24h";
+        example = "168h";
+        description = ''
+          How often to check each repository for loose objects that have piled
+          up, and repack it when they have, on the thresholds `git gc --auto`
+          uses. A sweep with nothing to do costs a directory listing per vault.
+          `"0s"` turns it off; run `git gc` yourself instead.
+        '';
+      };
     };
 
     authKeyFile = lib.mkOption {
