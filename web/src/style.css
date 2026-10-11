@@ -833,7 +833,10 @@ button {
 .cm-fol-tok-link, .cm-fol-tok-wikilink { color: var(--accent); }
 .cm-fol-tok-url { color: var(--text-muted); text-decoration: underline; }
 .cm-fol-tok-quote { color: var(--text-muted); font-style: italic; }
-.cm-fol-tok-list { color: var(--text-muted); }
+/* No colour for t.list: lezer marks list *content* with it, so painting it
+   muted here turns the body of every list item light-grey. The markers are the
+   thing to quiet, and they carry their own classes: .cm-fol-tok-mark in source
+   mode, .cm-fol-bullet in live preview. */
 .cm-fol-tok-mark { color: var(--text-muted); opacity: 0.55; }
 .cm-fol-tok-tag { color: var(--tag-fg); }
 .cm-fol-tok-comment { color: var(--text-muted); font-style: italic; }

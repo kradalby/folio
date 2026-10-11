@@ -30,10 +30,12 @@ import (
 func runDev(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("folio dev", flag.ContinueOnError)
 	var allowStubUI bool
+	var allowLAN bool
 	cfg, err := loadConfig(fs, args, func(fs *flag.FlagSet, c *config.Config) {
 		fs.StringVar(&c.DevAddr, "addr", "127.0.0.1:8080", "loopback address to listen on")
 		fs.StringVar(&c.DevLogin, "login", defaultDevLogin(), "the login every request is treated as")
 		fs.BoolVar(&allowStubUI, "allow-stub-ui", false, "start even though no web app bundle was built in")
+		fs.BoolVar(&allowLAN, "allow-lan", false, "listen on the local network as well as loopback (testing only)")
 	})
 	if err != nil {
 		return err
@@ -48,7 +50,7 @@ func runDev(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	return serveDev(ctx, cfg, newLogger(cfg.LogLevel))
+	return serveDev(ctx, cfg, newLogger(cfg.LogLevel), allowLAN)
 }
 
 // flagWasSet reports whether the user passed a flag, as opposed to it holding
@@ -79,8 +81,11 @@ func defaultDevLogin() string {
 // This exists so the app can be worked on without a tailnet auth key, and so
 // there is a way to smoke-test the whole stack. It is emphatically not a
 // deployment mode: anything that can reach the port is the configured user, so
-// it binds to loopback and says so loudly on startup.
-func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger) error {
+// it binds to loopback and says so loudly on startup. allowLAN lifts that
+// restriction for testing against a real client on the network; the user is
+// still whoever can reach the port, so it remains a developer convenience, not
+// a server.
+func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger, allowLAN bool) error {
 	a, err := openApp(cfg, log)
 	if err != nil {
 		return err
@@ -128,13 +133,19 @@ func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", cfg.DevAddr, err)
 	}
-	if !isLoopback(ln.Addr()) {
+	if !allowLAN && !isLoopback(ln.Addr()) {
 		ln.Close()
 		return fmt.Errorf("dev mode refuses to listen on %s: it authenticates every request as %q, "+
-			"so it must stay on loopback", cfg.DevAddr, cfg.DevLogin)
+			"so it must stay on loopback; pass -allow-lan to test against a real client on the network",
+			cfg.DevAddr, cfg.DevLogin)
 	}
 
 	srv := &http.Server{Handler: api, ReadHeaderTimeout: 30 * time.Second, IdleTimeout: 5 * time.Minute}
+
+	allowLANNote := ""
+	if allowLAN {
+		allowLANNote = "\n  -allow-lan: any machine that can reach this port is treated as the dev login."
+	}
 
 	fmt.Fprintf(os.Stderr, strings.Join([]string{
 		"",
@@ -142,11 +153,12 @@ func serveDev(ctx context.Context, cfg config.Config, log *slog.Logger) error {
 		"",
 		"  Every request is treated as %s. There is no tailnet check, which is why",
 		"  this refuses to listen anywhere but loopback. Do not run it as a server.",
+		"%s",
 		"",
 		"  State: %s",
 		"",
 		"",
-	}, "\n"), ln.Addr().String(), cfg.DevLogin, cfg.StateDir)
+	}, "\n"), ln.Addr().String(), cfg.DevLogin, allowLANNote, cfg.StateDir)
 
 	errc := make(chan error, 1)
 	go func() {

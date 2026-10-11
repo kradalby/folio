@@ -107,7 +107,10 @@ folio dev
 markdown files. The only thing it replaces is the identity step: every request
 is treated as `$USER@localhost`, because that is the one part that genuinely
 needs a tailnet. It refuses to listen anywhere but loopback, and keeps its state
-in `./dev-state` so experimenting cannot touch notes you care about.
+in `./dev-state` so experimenting cannot touch notes you care about. To test
+against a real client on the network, pass `-allow-lan` (or `-addr 0.0.0.0:8080`);
+every machine that can reach the port is treated as the dev login, so this is
+for testing, not deployment.
 
 ## Run it for real
 
