@@ -423,10 +423,8 @@ func (s *Service) Search(ctx context.Context, u identity.User, query string, lim
 			continue
 		}
 		hits = append(hits, Hit{
-			Summary: Summary{
-				Vault: owner.VaultDir, OwnerLogin: owner.Login, Path: h.Path, Title: h.Title,
-				Tags: orEmpty(h.Tags), SHA256: h.SHA256, UpdatedAt: h.UpdatedAt,
-			},
+			Vault: owner.VaultDir, OwnerLogin: owner.Login, Path: h.Path, Title: h.Title,
+			Tags: orEmpty(h.Tags), SHA256: h.SHA256, UpdatedAt: h.UpdatedAt,
 			Snippet: h.Snippet,
 			Score:   h.Score,
 		})

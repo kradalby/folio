@@ -124,10 +124,7 @@ func (m *model) insertCompletion(target string) tea.Cmd {
 // split a character in half.
 func (m *model) insertAtCursor(text string) {
 	value := []rune(m.ta.Value())
-	at := m.cursorOffset()
-	if at > len(value) {
-		at = len(value)
-	}
+	at := min(m.cursorOffset(), len(value))
 	next := string(value[:at]) + text + string(value[at:])
 	m.ta.SetValue(next)
 

@@ -100,16 +100,13 @@ func (m *model) sidebar(width, height int) string {
 	rows := max(1, height-1)
 	// Recompute the window here rather than trusting a stale scroll offset: the
 	// height can change under us on a resize.
-	top := clamp(m.top, 0, max(0, len(m.items)-1))
-	if m.sel < top {
-		top = m.sel
-	}
+	top := min(m.sel, clamp(m.top, 0, max(0, len(m.items)-1)))
 	if m.sel >= top+rows {
 		top = m.sel - rows + 1
 	}
 	m.top = top
 
-	for i := 0; i < rows; i++ {
+	for i := range rows {
 		idx := top + i
 		if idx >= len(m.items) {
 			lines = append(lines, strings.Repeat(" ", width))

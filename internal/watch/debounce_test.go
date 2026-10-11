@@ -223,11 +223,9 @@ func TestConcurrentAdds(t *testing.T) {
 
 		var wg sync.WaitGroup
 		for i := range 10 {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				d.Add(string(rune('a'+i)) + ".md")
-			}()
+			})
 		}
 		wg.Wait()
 		synctest.Sleep(200 * time.Millisecond)

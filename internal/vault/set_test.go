@@ -69,16 +69,14 @@ func TestSetConcurrentGet(t *testing.T) {
 	var wg sync.WaitGroup
 	handles := make([]*vault.Vault, 16)
 	for i := range 16 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			v, err := s.Get("shared")
 			if err != nil {
 				t.Errorf("Get: %v", err)
 				return
 			}
 			handles[i] = v
-		}()
+		})
 	}
 	wg.Wait()
 

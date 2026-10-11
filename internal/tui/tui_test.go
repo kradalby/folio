@@ -637,7 +637,7 @@ func TestNarrowTerminalShowsOnePane(t *testing.T) {
 	if d.m.sidebarWidth() != 0 {
 		t.Error("at 50 columns the sidebar should collapse")
 	}
-	for _, line := range strings.Split(d.view(), "\n") {
+	for line := range strings.SplitSeq(d.view(), "\n") {
 		if lipglossWidth(line) > 50 {
 			t.Fatalf("a line is %d columns wide in a 50 column terminal: %q", lipglossWidth(line), line)
 		}

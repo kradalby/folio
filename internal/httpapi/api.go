@@ -214,8 +214,7 @@ func (a *API) fail(w http.ResponseWriter, r *http.Request, status int, err error
 	}
 
 	body := errorBody{Error: err.Error()}
-	var ce *vault.ConflictError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*vault.ConflictError](err); ok {
 		body.ConflictPath = ce.ConflictPath
 	}
 	a.JSON(w, status, body)

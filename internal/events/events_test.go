@@ -122,15 +122,13 @@ func TestConcurrentUse(t *testing.T) {
 	var seen atomic.Int64
 
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 50 {
 				cancel := b.On(func(context.Context, noteChanged) { seen.Add(1) })
 				b.Emit(context.Background(), noteChanged{Path: "x"})
 				cancel()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	b.Wait()

@@ -174,8 +174,7 @@ func TestStaleCASWritesConflictFile(t *testing.T) {
 		t.Errorf("conflict file = %q, want our rejected content", side)
 	}
 
-	var ce *vault.ConflictError
-	if !errors.As(err2(v, first.SHA256), &ce) {
+	if _, ok := errors.AsType[*vault.ConflictError](err2(v, first.SHA256)); !ok {
 		t.Fatal("error should carry a *ConflictError with the details")
 	}
 }
@@ -372,19 +371,15 @@ func TestWritesAreAtomic(t *testing.T) {
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for range 40 {
 			v.Write("big.md", newer, "")
 			v.Write("big.md", old, "")
 		}
 		close(stop)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -400,7 +395,7 @@ func TestWritesAreAtomic(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 	wg.Wait()
 
 	// The staging area must not be left full of debris.
@@ -419,11 +414,9 @@ func TestConcurrentWritesToSamePathSerialize(t *testing.T) {
 	const writers = 16
 	var wg sync.WaitGroup
 	for i := range writers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			v.Write("counter.md", []byte(strings.Repeat("x", i+1)), "")
-		}()
+		})
 	}
 	wg.Wait()
 

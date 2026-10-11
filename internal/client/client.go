@@ -139,8 +139,7 @@ func (e *Error) Is(target error) bool {
 // ConflictPath returns where the server stashed a rejected write, if err is a
 // save conflict. The editor uses it to tell you nothing was lost.
 func ConflictPath(err error) string {
-	var e *Error
-	if errors.As(err, &e) {
+	if e, ok := errors.AsType[*Error](err); ok {
 		return e.ConflictPath
 	}
 	return ""

@@ -329,7 +329,7 @@ func (v *Vault) saveConflictCopy(clean string, content []byte) (string, error) {
 	}
 	stamp := v.Now().UTC().Format(tsLayout) + "Z"
 
-	for n := 0; n < 100; n++ {
+	for n := range 100 {
 		suffix := ""
 		if n > 0 {
 			suffix = fmt.Sprintf(" %d", n+1)

@@ -441,7 +441,7 @@ func (m *model) renderBody() {
 	}
 	if m.raw {
 		var lines []string
-		for _, l := range strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
+		for l := range strings.SplitSeq(strings.ReplaceAll(content, "\r\n", "\n"), "\n") {
 			lines = append(lines, hardwrap(l, max(8, m.notePaneWidth()))...)
 		}
 		m.body = lines
@@ -478,8 +478,8 @@ func (m *model) onMe(msg meMsg) tea.Cmd {
 		vault, path := m.vault, startup
 		// "vault/path" addresses someone else's note; a bare path is your own.
 		for _, v := range msg.vaults {
-			if strings.HasPrefix(startup, v.Vault+"/") {
-				vault, path = v.Vault, strings.TrimPrefix(startup, v.Vault+"/")
+			if after, ok := strings.CutPrefix(startup, v.Vault+"/"); ok {
+				vault, path = v.Vault, after
 				break
 			}
 		}

@@ -1,6 +1,7 @@
 package watch_test
 
 import (
+	maps0 "maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -46,9 +47,7 @@ func (s *sink) waitFor(t *testing.T, what string, cond func(map[string]int) bool
 		s.mu.Lock()
 		ok := cond(s.paths)
 		snapshot := make(map[string]int, len(s.paths))
-		for k, v := range s.paths {
-			snapshot[k] = v
-		}
+		maps0.Copy(snapshot, s.paths)
 		s.mu.Unlock()
 		if ok {
 			return

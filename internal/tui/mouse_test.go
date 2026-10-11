@@ -344,15 +344,15 @@ func (d *driver) clickText(t *testing.T, needle string) bool {
 	t.Helper()
 	for i, line := range d.m.body {
 		plain := ansi.Strip(line)
-		at := strings.Index(plain, needle)
-		if at < 0 {
+		before, _, ok := strings.Cut(plain, needle)
+		if !ok {
 			continue
 		}
 		row := i - d.m.vp.YOffset
 		if row < 0 || row >= d.m.vp.Height {
 			return false // scrolled out of view
 		}
-		col := ansi.StringWidth(plain[:at])
+		col := ansi.StringWidth(before)
 		d.click(noteX+col, firstRow+row)
 		return true
 	}
