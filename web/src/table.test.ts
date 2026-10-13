@@ -91,6 +91,13 @@ describe("table live preview", () => {
     ]);
   });
 
+  it("keeps empty cells from shifting later columns left", () => {
+    // The parser emits no TableCell for an empty cell, just two delimiters in a
+    // row; without special handling the last column lands one slot early.
+    const { parent } = mount(INTRO + "| A | B | C |\n|---|---|---|\n| a | | c |\n");
+    expect(cells(parent)[1]).toEqual(["a", "", "c"]);
+  });
+
   it("puts the first row in a header", () => {
     const { parent } = mount(INTRO + "| A | B |\n|---|---|\n| c | d |\n");
     const t = table(parent)!;

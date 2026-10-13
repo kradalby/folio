@@ -121,9 +121,17 @@ export function readTable(
     if (row.name !== "TableHeader" && row.name !== "TableRow") continue;
 
     const cells: TableCellModel[] = [];
+    // An empty cell produces two adjacent delimiters with no TableCell between
+    // them, so the gap itself has to become a cell or every column after it
+    // shifts left.
+    let prev: SyntaxNode | null = null;
     for (let cell = row.firstChild; cell; cell = cell.nextSibling) {
-      if (cell.name !== "TableCell") continue;
-      cells.push({ from: cell.from, body: inlines(state, cell, cell.from, cell.to, handlers) });
+      if (cell.name === "TableCell") {
+        cells.push({ from: cell.from, body: inlines(state, cell, cell.from, cell.to, handlers) });
+      } else if (cell.name === "TableDelimiter" && prev?.name === "TableDelimiter") {
+        cells.push({ from: cell.from, body: [] });
+      }
+      prev = cell;
     }
     rows.push({ header: row.name === "TableHeader", cells });
   }
