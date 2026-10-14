@@ -21,13 +21,24 @@
         go = goPkgs.go_1_27;
         buildGoModule = pkgs.buildGoModule.override { inherit go; };
 
-        version = "0.1.0";
+        # Release number, bumped when cutting a release.
+        version = "0.1.2";
+
+        # What the binary reports. Nix flakes cannot see git tags or run git,
+        # so there is no git-describe here; instead we append the source's own
+        # metadata, which is enough to trace any build back to a commit. A
+        # tarball build has neither rev nor dirtyRev and just gets the release
+        # number.
+        sourceRev = self.rev or self.dirtyRev or null;
+        buildVersion = if sourceRev == null
+          then version
+          else "${version}-${self.lastModifiedDate}-${lib.substring 0 12 sourceRev}";
 
         frontend = pkgs.buildNpmPackage {
           pname = "folio-frontend";
           inherit version;
           src = ./web;
-          npmDepsHash = "sha256-ZbfgimvTkkWldQOq7KktrNd71vpZOtxvCVZKQzNf1Gk=";
+          npmDepsHash = "sha256-TaYCPEAa19XGkKWpFasRPX6vTqVlnYU4VnEQP4JzXQE=";
           dontNpmInstall = true;
           installPhase = ''
             runHook preInstall
@@ -55,7 +66,7 @@
               || (echo "frontend bundle missing after copy" >&2; exit 1)
           '';
 
-          ldflags = [ "-s" "-w" "-X" "main.version=${version}" ];
+          ldflags = [ "-s" "-w" "-X" "main.version=${buildVersion}" ];
 
           subPackages = [ "cmd/folio" ];
 
