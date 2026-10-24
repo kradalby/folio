@@ -52,7 +52,7 @@
           pname = "folio";
           inherit version;
           src = ./.;
-          vendorHash = "sha256-JgYLNI83ddNpquFMTW+nHHjTol03nz26k8QEc2m4x6I=";
+          vendorHash = "sha256-xXgUU/YS7a5qLtsGXv/M01TD1ofTQQKaiIHda9wIWzc=";
 
           env.CGO_ENABLED = 0;
 
