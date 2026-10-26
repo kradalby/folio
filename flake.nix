@@ -9,10 +9,11 @@
     # with a confusing go.mod error. Pin the toolchain to a revision that is
     # known to provide go 1.27.3 and bring it in as its own dependency.
     go-nixpkgs.url = "github:NixOS/nixpkgs/02c087f3fe673c9e317f206a627cb6b910336dbe";
+    headscale.url = "github:juanfont/headscale/2d220b2eb8be8d31ed603000d0b0be02c2cd94d0";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, go-nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, go-nixpkgs, flake-utils, headscale }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -90,7 +91,7 @@
             go
             pkgs.gopls
             pkgs.gotools
-            pkgs.go-tools
+            (pkgs.go-tools.override { inherit buildGoModule; })
             pkgs.golangci-lint
             pkgs.delve
             pkgs.nodejs_24
@@ -111,8 +112,8 @@
         };
 
         checks = {
-          # `nix flake check` builds the binary, which runs `go test ./...` as
-          # part of buildGoModule's check phase.
+          # buildGoModule checks the selected command package. `make check`
+          # separately runs the full Go and frontend suites.
           build = folio;
           inherit frontend;
 
@@ -145,59 +146,7 @@
         # hardening does not stop folio dead, which is the failure that would
         # otherwise turn up on a real deploy.
         // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-          nixos-vm = pkgs.testers.runNixOSTest {
-            name = "folio-service";
-
-            nodes = {
-              # The default: state under /var/lib/folio.
-              machine = { ... }: {
-                imports = [ self.nixosModules.default ];
-                services.folio = {
-                  enable = true;
-                  hostname = "notes";
-                  logLevel = "debug";
-                };
-                virtualisation.memorySize = 2048;
-              };
-
-              # An overridden state directory, on a path whose parent does not
-              # exist either, so the module has to create the lot.
-              custom = { ... }: {
-                imports = [ self.nixosModules.default ];
-                services.folio = {
-                  enable = true;
-                  hostname = "notes";
-                  stateDir = "/srv/notes/folio-data";
-                };
-                virtualisation.memorySize = 2048;
-              };
-            };
-
-            testScript = ''
-              machine.wait_for_unit("folio.service")
-
-              # There is no tailnet in a test VM, so folio will not get past
-              # joining it. Reaching that point is the assertion: the binary ran
-              # under the sandbox, read its config, and found its state
-              # directory, which is everything the module is responsible for.
-              machine.wait_until_succeeds(
-                  "journalctl -u folio.service | grep -q 'connecting to the tailnet'"
-              )
-
-              # The state directory is folio's own, and private.
-              machine.succeed("test -d /var/lib/folio")
-              machine.succeed(
-                  "stat -c '%U:%G %a' /var/lib/folio | grep -qx 'folio:folio 700'"
-              )
-
-              # A seccomp filter that is too tight shows up as SIGSYS rather
-              # than as a clean error, so check for it specifically.
-              machine.fail("journalctl -u folio.service | grep -qiE 'bad system call|SIGSYS'")
-
-              # And it should not have died on a sandbox denial either.
-              machine.fail("journalctl -u folio.service | grep -qi 'permission denied'")
-            '';
-          };
+          nixos-vm = import ./nix/e2e.nix { inherit pkgs self headscale; };
         };
       })
     // {
