@@ -118,9 +118,10 @@ are read-only unless the share grants write.`
 // identity middleware, which puts the user in the request context. Doing the
 // lookup here instead would duplicate the error mapping and let the two drift.
 func (s *Server) HTTPHandler(userFrom func(context.Context) identity.User) http.Handler {
+	// A session must not retain another request's authenticated identity.
 	return mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		return s.ForUser(userFrom(r.Context()))
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{Stateless: true})
 }
 
 // scope resolves a vault name for the session's user.
