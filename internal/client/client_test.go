@@ -286,9 +286,6 @@ func TestDailyNoteQuery(t *testing.T) {
 		t.Fatalf("DailyNote: %v", err)
 	}
 	got := rec.get()
-	if got.method != http.MethodGet {
-		t.Errorf("read-only daily method = %q, want GET", got.method)
-	}
 	if !strings.Contains(got.query, "date=2026-08-30") || !strings.Contains(got.query, "create=false") {
 		t.Errorf("query = %q", got.query)
 	}
@@ -299,9 +296,6 @@ func TestDailyNoteQuery(t *testing.T) {
 	}
 	if q := rec.get().query; q != "" {
 		t.Errorf("query = %q for today-and-create, want empty", q)
-	}
-	if method := rec.get().method; method != http.MethodPost {
-		t.Errorf("creating daily method = %q, want POST", method)
 	}
 }
 

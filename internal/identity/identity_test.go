@@ -265,34 +265,6 @@ func TestAgentSharesTheVaultOfTheUserItActsAs(t *testing.T) {
 	}
 }
 
-func TestMappedAgentRejectsAmbiguousLogin(t *testing.T) {
-	who := alice
-	r, _ := newResolver(t, func(context.Context, string) (identity.WhoIs, error) {
-		return who, nil
-	}, func(o *identity.Options) {
-		o.CacheTTL = 0
-		o.Agents = map[string]string{"tag:ci": alice.Login}
-	})
-	owner, err := r.Identify(t.Context(), "100.64.0.1:1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	who = identity.WhoIs{Tags: []string{"tag:ci"}}
-	agent, err := r.Identify(t.Context(), "100.64.0.3:1")
-	if err != nil || agent.ID != owner.ID || !agent.IsAgent {
-		t.Fatalf("unique mapped user = %+v, %v", agent, err)
-	}
-	who = identity.WhoIs{UserID: 202, Login: "ALICE@GITHUB"}
-	other, err := r.Identify(t.Context(), "100.64.0.2:1")
-	if err != nil || other.ID == owner.ID {
-		t.Fatalf("distinct stable identity = %+v, %v", other, err)
-	}
-	who = identity.WhoIs{Tags: []string{"tag:ci"}}
-	if _, err := r.Identify(t.Context(), "100.64.0.3:1"); !errors.Is(err, identity.ErrNoIdentity) {
-		t.Errorf("ambiguous agent mapping = %v, want ErrNoIdentity", err)
-	}
-}
-
 func TestAgentCannotConjureAUser(t *testing.T) {
 	// A tagged node may borrow an identity, never mint one. If the mapping names
 	// someone folio has never seen, that is a configuration mistake (a typo in

@@ -201,7 +201,7 @@ export const api = {
 
   dailyNote: (vault: string, date?: string) => {
     const q = date ? `?date=${encodeURIComponent(date)}` : "";
-    return request<Note>(`/api/vaults/${enc(vault)}/daily${q}`, { method: "POST" });
+    return request<Note>(`/api/vaults/${enc(vault)}/daily${q}`);
   },
 
   search: (q: string, limit = 50) =>

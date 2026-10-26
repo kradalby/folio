@@ -90,7 +90,7 @@ func (r *Resolver) Check(ctx context.Context, u identity.User, vaultID int64, pa
 		return fmt.Errorf("%w: %v", ErrDenied, err)
 	}
 
-	grants, err := r.grantsFor(ctx, u.ID, vaultID)
+	grants, err := r.grantsFor(ctx, u.Login, vaultID)
 	if err != nil {
 		return err
 	}
@@ -101,14 +101,13 @@ func (r *Resolver) Check(ctx context.Context, u identity.User, vaultID int64, pa
 	return nil
 }
 
-// grantsFor loads every grant made to a stable user identity in one vault.
-func (r *Resolver) grantsFor(ctx context.Context, userID int64, vaultID int64) ([]Share, error) {
+// grantsFor loads every grant made to login in one vault.
+func (r *Resolver) grantsFor(ctx context.Context, login string, vaultID int64) ([]Share, error) {
 	grants, err := r.db.All[Share](ctx, `
 		SELECT s.id, s.vault_id, s.owner_user_id, u.login AS owner_login, s.path, s.is_folder,
-		       g.login AS grantee_login, s.perm, s.created_at
+		       s.grantee_login, s.perm, s.created_at
 		FROM shares s JOIN users u ON u.id = s.owner_user_id
-		JOIN users g ON g.id = s.grantee_user_id
-		WHERE s.vault_id = ? AND s.grantee_user_id = ?`, vaultID, userID)
+		WHERE s.vault_id = ? AND s.grantee_login = ? COLLATE NOCASE`, vaultID, login)
 	if err != nil {
 		return nil, fmt.Errorf("load grants: %w", err)
 	}
@@ -156,82 +155,65 @@ func (r *Resolver) Grant(ctx context.Context, owner identity.User, path string, 
 	if err != nil {
 		return Share{}, err
 	}
+	if strings.EqualFold(granteeLogin, owner.Login) {
+		return Share{}, errors.New("you already have access to your own notes")
+	}
+
+	// Sharing with a login folio has never seen is almost always a typo, and
+	// accepting it would leave you thinking the note was shared when it was not.
+	if _, err := r.db.One[int64](ctx, `SELECT id FROM users WHERE login = ? COLLATE NOCASE`, granteeLogin); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Share{}, fmt.Errorf("%w: %s has not used folio yet, so there is nothing to share with",
+				identity.ErrUnknownUser, granteeLogin)
+		}
+		return Share{}, fmt.Errorf("look up %q: %w", granteeLogin, err)
+	}
+
 	// The owner can only ever share out of their own vault. Nothing in the API
 	// should be able to reach this with someone else's vault id, but this is the
 	// place that guarantees it.
 	if owner.VaultID == 0 {
 		return Share{}, fmt.Errorf("%w: no vault for %s", ErrDenied, owner.Login)
 	}
-	var s Share
-	err = r.db.Tx(ctx, func(tx *store.Tx) error {
-		if err := assertOwnsVault(ctx, tx, owner); err != nil {
-			return err
-		}
-		// Sharing with a login folio has never seen is almost always a typo, and
-		// accepting it would leave you thinking the note was shared when it was not.
-		users, err := tx.All[struct {
-			ID    int64
-			Login string
-		}](ctx,
-			`SELECT id, login FROM users WHERE login = ? COLLATE NOCASE LIMIT 2`, granteeLogin)
-		if err != nil {
-			return fmt.Errorf("look up %q: %w", granteeLogin, err)
-		}
-		if len(users) == 0 {
-			return fmt.Errorf("%w: %s has not used folio yet, so there is nothing to share with",
-				identity.ErrUnknownUser, granteeLogin)
-		}
-		if len(users) != 1 {
-			return fmt.Errorf("%w: ambiguous login %q", identity.ErrUnknownUser, granteeLogin)
-		}
-		grantee := users[0]
-		if grantee.ID == owner.ID {
-			return errors.New("you already have access to your own notes")
-		}
+	if err := r.assertOwnsVault(ctx, owner); err != nil {
+		return Share{}, err
+	}
 
-		// Regrant all matching legacy duplicates so a downgrade cannot leave an
-		// older, stronger grant active. Bound grants never follow login reuse.
-		updated, err := tx.Exec(ctx, `
-			UPDATE shares SET grantee_user_id = ?, perm = ?, is_folder = ?
-			WHERE owner_user_id = ? AND vault_id = ? AND path = ?
-			  AND (grantee_user_id = ? OR (grantee_user_id IS NULL AND grantee_login = ? COLLATE NOCASE))`,
-			grantee.ID, string(perm), isFolder, owner.ID, owner.VaultID, clean, grantee.ID, grantee.Login)
-		if err != nil {
-			return fmt.Errorf("update share: %w", err)
-		}
-		n, err := updated.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("count updated shares: %w", err)
-		}
-		if n == 0 {
-			if _, err := tx.Exec(ctx, `
-				INSERT INTO shares (id, vault_id, owner_user_id, path, is_folder, grantee_login, perm, created_at, grantee_user_id)
-				VALUES (?,?,?,?,?,?,?,?,?)`, uuid.NewV7().String(), owner.VaultID, owner.ID,
-				clean, isFolder, grantee.Login, string(perm), time.Now().Unix(), grantee.ID); err != nil {
-				return fmt.Errorf("create share: %w", err)
-			}
-		}
+	s := Share{
+		ID:           uuid.NewV7().String(),
+		VaultID:      owner.VaultID,
+		OwnerUserID:  owner.ID,
+		OwnerLogin:   owner.Login,
+		Path:         clean,
+		IsFolder:     isFolder,
+		GranteeLogin: granteeLogin,
+		Perm:         perm,
+		CreatedAt:    time.Now().Unix(),
+	}
+	if _, err := r.db.Exec(ctx, `
+		INSERT INTO shares (id, vault_id, owner_user_id, path, is_folder, grantee_login, perm, created_at)
+		VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT (vault_id, path, grantee_login) DO UPDATE SET
+			perm = excluded.perm, is_folder = excluded.is_folder`,
+		s.ID, s.VaultID, s.OwnerUserID, s.Path, s.IsFolder, s.GranteeLogin, string(s.Perm), s.CreatedAt); err != nil {
+		return Share{}, fmt.Errorf("create share: %w", err)
+	}
 
-		// Read the row back: updates keep the original id and creation time.
-		s, err = tx.One[Share](ctx, `
-			SELECT s.id, s.vault_id, s.owner_user_id, o.login AS owner_login, s.path, s.is_folder,
-			       g.login AS grantee_login, s.perm, s.created_at
-			FROM shares s JOIN users o ON o.id = s.owner_user_id
-			JOIN users g ON g.id = s.grantee_user_id
-			WHERE s.owner_user_id = ? AND s.vault_id = ? AND s.path = ? AND s.grantee_user_id = ?
-			ORDER BY s.created_at, s.id LIMIT 1`, owner.ID, owner.VaultID, clean, grantee.ID)
-		if err != nil {
-			return fmt.Errorf("read back share: %w", err)
-		}
-		return nil
-	})
-	return s, err
+	// Read the id back: on an update the existing row keeps its own id.
+	id, err := r.db.One[string](ctx,
+		`SELECT id FROM shares WHERE vault_id = ? AND path = ? AND grantee_login = ?`,
+		s.VaultID, s.Path, s.GranteeLogin)
+	if err != nil {
+		return Share{}, fmt.Errorf("read back share: %w", err)
+	}
+	s.ID = id
+	return s, nil
 }
 
 // assertOwnsVault confirms the user record and vault record agree, guarding
 // against a caller assembling an identity.User by hand.
-func assertOwnsVault(ctx context.Context, tx *store.Tx, u identity.User) error {
-	ownerID, err := tx.One[int64](ctx, `SELECT user_id FROM vaults WHERE id = ?`, u.VaultID)
+func (r *Resolver) assertOwnsVault(ctx context.Context, u identity.User) error {
+	ownerID, err := r.db.One[int64](ctx, `SELECT user_id FROM vaults WHERE id = ?`, u.VaultID)
 	if err != nil {
 		return fmt.Errorf("verify vault ownership: %w", err)
 	}
@@ -270,7 +252,7 @@ func (r *Resolver) ReadableVaults(ctx context.Context, u identity.User) ([]int64
 		ids = append(ids, u.VaultID)
 	}
 	shared, err := r.db.All[int64](ctx,
-		`SELECT DISTINCT vault_id FROM shares WHERE grantee_user_id = ?`, u.ID)
+		`SELECT DISTINCT vault_id FROM shares WHERE grantee_login = ? COLLATE NOCASE`, u.Login)
 	if err != nil {
 		return nil, fmt.Errorf("list readable vaults: %w", err)
 	}
@@ -286,20 +268,18 @@ func (r *Resolver) ReadableVaults(ctx context.Context, u identity.User) ([]int64
 func (r *Resolver) SharedWithMe(ctx context.Context, u identity.User) ([]Share, error) {
 	return r.db.All[Share](ctx, `
 		SELECT s.id, s.vault_id, s.owner_user_id, o.login AS owner_login, s.path, s.is_folder,
-		       g.login AS grantee_login, s.perm, s.created_at
+		       s.grantee_login, s.perm, s.created_at
 		FROM shares s JOIN users o ON o.id = s.owner_user_id
-		JOIN users g ON g.id = s.grantee_user_id
-		WHERE s.grantee_user_id = ?
-		ORDER BY s.created_at DESC`, u.ID)
+		WHERE s.grantee_login = ? COLLATE NOCASE
+		ORDER BY s.created_at DESC`, u.Login)
 }
 
 // SharesIMade lists grants u has handed out.
 func (r *Resolver) SharesIMade(ctx context.Context, u identity.User) ([]Share, error) {
 	return r.db.All[Share](ctx, `
 		SELECT s.id, s.vault_id, s.owner_user_id, o.login AS owner_login, s.path, s.is_folder,
-		       COALESCE(g.login, s.grantee_login) AS grantee_login, s.perm, s.created_at
+		       s.grantee_login, s.perm, s.created_at
 		FROM shares s JOIN users o ON o.id = s.owner_user_id
-		LEFT JOIN users g ON g.id = s.grantee_user_id
 		WHERE s.owner_user_id = ?
 		ORDER BY s.created_at DESC`, u.ID)
 }
@@ -312,7 +292,7 @@ func (r *Resolver) FilterReadable(ctx context.Context, u identity.User, vaultID 
 	if u.VaultID == vaultID {
 		return paths, nil
 	}
-	grants, err := r.grantsFor(ctx, u.ID, vaultID)
+	grants, err := r.grantsFor(ctx, u.Login, vaultID)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +319,7 @@ func (r *Resolver) PermFor(ctx context.Context, u identity.User, vaultID int64, 
 	if err != nil {
 		return "", err
 	}
-	grants, err := r.grantsFor(ctx, u.ID, vaultID)
+	grants, err := r.grantsFor(ctx, u.Login, vaultID)
 	if err != nil {
 		return "", err
 	}

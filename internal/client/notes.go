@@ -134,16 +134,14 @@ func (c *Client) EditNote(ctx context.Context, vault, path string, edits []Edit)
 // unless create is false. A zero day means today.
 func (c *Client) DailyNote(ctx context.Context, vault string, day time.Time, create bool) (Note, error) {
 	q := url.Values{}
-	method := http.MethodPost
 	if !day.IsZero() {
 		q.Set("date", day.Format("2006-01-02"))
 	}
 	if !create {
-		method = http.MethodGet
 		q.Set("create", "false")
 	}
 	n, _, err := c.do[Note](ctx, request{
-		Method: method, Path: "/api/vaults/" + vault + "/daily", Query: q,
+		Method: http.MethodGet, Path: "/api/vaults/" + vault + "/daily", Query: q,
 	})
 	return n, err
 }

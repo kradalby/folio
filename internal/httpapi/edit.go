@@ -75,7 +75,7 @@ func (a *API) handleEditNote(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDailyNote returns today's daily note, or the one for ?date=YYYY-MM-DD,
-// creating it from a template only on POST unless ?create=false.
+// creating it from a template unless ?create=false.
 func (a *API) handleDailyNote(w http.ResponseWriter, r *http.Request) {
 	sc, err := a.scope(r)
 	if err != nil {
@@ -90,7 +90,7 @@ func (a *API) handleDailyNote(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	create := r.Method == http.MethodPost && r.URL.Query().Get("create") != "false"
+	create := r.URL.Query().Get("create") != "false"
 
 	n, err := a.Notes.DailyNote(r.Context(), sc, day, create)
 	if err != nil {

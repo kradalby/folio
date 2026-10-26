@@ -123,15 +123,6 @@ describe("App", () => {
     expect(document.querySelector(".sidebar-foot")?.textContent).toContain("Me");
   });
 
-  it("opens the daily note through the creation endpoint", async () => {
-    const fetch = fakeFetch();
-    vi.stubGlobal("fetch", fetch);
-    await startApp();
-    const daily = fetch.mock.calls.find(([url]) => String(url).endsWith("/daily"));
-    expect(daily?.[1]?.method).toBe("POST");
-    expect(document.querySelector(".cm-editor")?.textContent).toContain("Monday");
-  });
-
   it("lists notes and tags in the sidebar", async () => {
     await startApp();
     expect(document.querySelector(".note-item-title")?.textContent).toBe("Monday");

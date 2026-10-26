@@ -3,13 +3,11 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -651,77 +649,6 @@ func TestOtherUsersVaultIsNotEnumerable(t *testing.T) {
 
 // --- CSRF ---
 
-func TestDailyNoteCreationRequiresPost(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		method string
-		query  string
-		origin string
-		fetch  string
-		status int
-	}{
-		{"header-free get", "GET", "", "", "", 404},
-		{"get cannot opt into creation", "GET", "&create=true", "", "", 404},
-		{"cross-site get", "GET", "", "", "cross-site", 404},
-		{"cross-site post", "POST", "", "", "cross-site", 403},
-		{"origin fallback", "POST", "&create=true", "https://other.example", "", 403},
-		{"null origin", "POST", "", "null", "", 403},
-		{"read only", "GET", "&create=false", "https://other.example", "cross-site", 404},
-		{"read only post", "POST", "&create=false", "", "same-origin", 404},
-		{"head", "HEAD", "", "https://other.example", "cross-site", 404},
-		{"header-free head", "HEAD", "&create=true", "", "", 404},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			h := newHarness(t)
-			alice := h.as("100.64.0.1", aliceWho)
-			path := "/api/vaults/me/daily?date=2026-08-30"
-			resp := alice.do(tc.method, path+tc.query, nil, func(r *http.Request) {
-				r.Header.Set("Sec-Fetch-Site", tc.fetch)
-				r.Header.Set("Origin", tc.origin)
-			})
-			if resp.StatusCode != tc.status {
-				t.Errorf("cross-origin daily status = %d, want %d", resp.StatusCode, tc.status)
-			}
-			resp.Body.Close()
-			_, err := os.Stat(filepath.Join(h.vaults.Root(), "alice-github", "Daily", "2026-08-30.md"))
-			if !errors.Is(err, os.ErrNotExist) {
-				t.Errorf("rejected or read-only request left a note file: %v", err)
-			}
-			count, err := h.db.One[int](t.Context(), "SELECT count(*) FROM notes")
-			if err != nil || count != 0 {
-				t.Errorf("rejected or read-only request changed the index: count=%d error=%v", count, err)
-			}
-			resp = alice.do("GET", path+"&create=false", nil)
-			if resp.StatusCode != http.StatusNotFound {
-				t.Errorf("rejected or read-only request persisted a daily note: status %d", resp.StatusCode)
-			}
-			resp.Body.Close()
-			resp = alice.do("POST", path, nil)
-			wantStatus(t, resp, http.StatusOK)
-			resp.Body.Close()
-			if _, err := os.Stat(filepath.Join(h.vaults.Root(), "alice-github", "Daily", "2026-08-30.md")); err != nil {
-				t.Errorf("permitted POST did not create a note file: %v", err)
-			}
-			if count, err := h.db.One[int](t.Context(), "SELECT count(*) FROM notes"); err != nil || count != 1 {
-				t.Errorf("permitted POST did not index note: count=%d error=%v", count, err)
-			}
-			resp = alice.do("HEAD", path, nil)
-			wantStatus(t, resp, http.StatusOK)
-			resp.Body.Close()
-			resp = alice.do("GET", path+"&create=false", nil, func(r *http.Request) {
-				r.Header.Set("Sec-Fetch-Site", "cross-site")
-			})
-			wantStatus(t, resp, http.StatusOK)
-			resp.Body.Close()
-			resp = alice.do("POST", "/api/vaults/me/daily?date=2026-08-31", nil, func(r *http.Request) {
-				r.Header.Del("Sec-Fetch-Site")
-			})
-			wantStatus(t, resp, http.StatusOK)
-			resp.Body.Close()
-		})
-	}
-}
-
 func TestCrossSiteWriteIsBlocked(t *testing.T) {
 	// Identity comes from the network layer with no token or cookie, so without
 	// this check any page on the internet could POST to the tailnet URL from
@@ -1092,9 +1019,8 @@ func TestDailyNoteIsCreatedOnDemand(t *testing.T) {
 		Path    string `json:"path"`
 		Content string `json:"content"`
 	}
-	resp := alice.do("POST", "/api/vaults/me/daily?date=2026-08-30", nil)
+	resp := alice.getJSON("/api/vaults/me/daily?date=2026-08-30", &got)
 	wantStatus(t, resp, 200)
-	decodeInto(t, resp, &got)
 	if got.Path != "Daily/2026-08-30.md" {
 		t.Errorf("Path = %q", got.Path)
 	}
@@ -1109,15 +1035,6 @@ func TestDailyNoteIsCreatedOnDemand(t *testing.T) {
 	alice.getJSON("/api/vaults/me/daily?date=2026-08-30", &again)
 	if again.Path != got.Path {
 		t.Errorf("second call returned %q", again.Path)
-	}
-	resp = alice.do("POST", "/api/vaults/me/daily?date=2026-08-30", nil)
-	wantStatus(t, resp, http.StatusOK)
-	var repeated struct {
-		Content string `json:"content"`
-	}
-	decodeInto(t, resp, &repeated)
-	if repeated.Content != got.Content {
-		t.Errorf("repeated POST changed the note: %q", repeated.Content)
 	}
 }
 

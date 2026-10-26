@@ -224,30 +224,6 @@ folio index rebuild         # reconstruct the index from the files entirely
 None of these touch users, vaults, or shares, which is why `index rebuild` is
 the supported recovery path rather than deleting `folio.db`.
 
-### Upgrading sharing and daily-note clients
-
-Shares now bind to a stable user identity, so renaming or reusing a tailnet
-login cannot transfer access. Existing shares contain only a login, which cannot
-prove who originally received them. The upgrade preserves every legacy share
-and its ID, but disables its shared access until the owner explicitly grants
-the note or folder again to the intended user's current login. Owners retain
-access to their own notes and can list or revoke their legacy shares. A login
-matching multiple known users is rejected rather than guessed. Confirm the
-recipient before regranting; a recycled login may belong to someone else.
-
-Back up `folio.db` with the service stopped before upgrading. Do not run old and
-new binaries against the same database. To roll back, stop the service and
-restore that database backup with the old binary; it still has the old
-login-based sharing behavior. Restoring the backup also loses later database
-changes, so preserve the current state before doing so.
-
-`GET` and `HEAD /api/vaults/{vault}/daily` are now read-only, including with
-`?create=true`; an absent note returns 404. External clients that create daily
-notes must use `POST` on the same URL, retaining any `?date=YYYY-MM-DD` query.
-Repeated POSTs return the existing note without replacing it. `?create=false`
-still prevents creation. The bundled browser and Go/TUI clients use POST;
-MCP's `get_daily_note` contract is unchanged.
-
 ## In the terminal
 
 ![folio tui showing the note list on the left and a note rendered on the right,

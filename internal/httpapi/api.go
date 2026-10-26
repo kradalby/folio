@@ -126,7 +126,6 @@ func (a *API) routes() {
 	a.mux.Handle("POST /api/vaults/{vault}/append", api(a.handleAppendNote))
 	a.mux.Handle("POST /api/vaults/{vault}/edit", api(a.handleEditNote))
 	a.mux.Handle("GET /api/vaults/{vault}/daily", api(a.handleDailyNote))
-	a.mux.Handle("POST /api/vaults/{vault}/daily", api(a.handleDailyNote))
 	a.mux.Handle("GET /api/vaults/{vault}/backlinks/{path...}", api(a.handleBacklinks))
 	a.mux.Handle("GET /api/vaults/{vault}/embed", api(a.handleEmbed))
 
