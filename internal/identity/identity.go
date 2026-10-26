@@ -334,15 +334,19 @@ func (r *Resolver) ensureVault(ctx context.Context, userID int64, dir string) (i
 // someone who has not logged in yet has to fail loudly, or you would think you
 // had shared it when you had not.
 func (r *Resolver) ByLogin(ctx context.Context, login string) (User, error) {
-	row, err := r.db.One[userRow](ctx,
+	rows, err := r.db.All[userRow](ctx,
 		`SELECT id, tailscale_user_id, login, display_name, profile_pic_url, vault_dir
-		 FROM users WHERE login = ? COLLATE NOCASE`, login)
-	if errors.Is(err, sql.ErrNoRows) {
-		return User{}, fmt.Errorf("%w: %s", ErrUnknownUser, login)
-	}
+		 FROM users WHERE login = ? COLLATE NOCASE LIMIT 2`, login)
 	if err != nil {
 		return User{}, fmt.Errorf("look up %q: %w", login, err)
 	}
+	if len(rows) == 0 {
+		return User{}, fmt.Errorf("%w: %s", ErrUnknownUser, login)
+	}
+	if len(rows) != 1 {
+		return User{}, fmt.Errorf("%w: ambiguous login %q", ErrUnknownUser, login)
+	}
+	row := rows[0]
 	vaultID, err := r.ensureVault(ctx, row.ID, row.VaultDir)
 	if err != nil {
 		return User{}, err
