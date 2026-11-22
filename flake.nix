@@ -12,11 +12,8 @@
     flake-utils.url = "github:numtide/flake-utils";
     # Control server for the tailnet VM test (nix/tailnet-test.nix), via its
     # NixOS test kit. Builds from source; the kit is newer than any release in
-    # nixpkgs. Following our nixpkgs is fine while it has the Go headscale's
-    # go.mod asks for.
-    headscale.url = "github:juanfont/headscale";
-    headscale.inputs.nixpkgs.follows = "nixpkgs";
-    headscale.inputs.flake-utils.follows = "flake-utils";
+    # nixpkgs. Keep Headscale's own inputs so its package builds as tested upstream.
+    headscale.url = "github:juanfont/headscale/main";
   };
 
   outputs = { self, nixpkgs, go-nixpkgs, flake-utils, headscale }:
