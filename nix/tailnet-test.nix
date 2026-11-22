@@ -221,5 +221,19 @@ pkgs.testers.runNixOSTest {
 
     with subtest("the sandbox did not get in the way"):
         server.fail("journalctl -u folio.service | grep -qiE 'bad system call|SIGSYS'")
+
+    with subtest("restart keeps the node identity and saved note without an auth key"):
+        def notes_node():
+            nodes = json.loads(headscale.succeed("headscale nodes list -o json"))
+            [node] = [n for n in nodes if n["givenName"] == "notes"]
+            return node["id"], node["ipAddresses"]
+
+        before = notes_node()
+        # LoadCredential needs the source file even when Folio no longer needs a key.
+        server.succeed(": > /run/folio-authkey && systemctl restart folio.service")
+        assert first_me(alice)["vault"] == vault
+        assert notes_node() == before
+        saved = ok(alice, "GET", f"/api/vaults/{vault}/notes/Project/Notes.md")
+        assert "Bob was here." in saved["content"], saved
   '';
 }
